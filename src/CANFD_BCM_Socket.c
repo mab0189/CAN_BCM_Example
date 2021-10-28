@@ -15,7 +15,6 @@
 #include "CANFD_BCM_Config.h"
 #include "CANFD_BCM_Socket.h"
 #include <errno.h>
-#include <linux/can/raw.h>
 #include <linux/can.h>
 #include <net/if.h>
 #include <string.h>
@@ -31,7 +30,7 @@
 int setupSocket(int *const socketFD, struct sockaddr_can *const addr){
 
     // Get the socket file descriptor for ioctl
-    *socketFD = socket(PF_CAN, SOCK_RAW, CAN_RAW);
+    *socketFD = socket(PF_CAN, SOCK_DGRAM, CAN_BCM);
 
     // Error handling
     if(*socketFD == -1){
@@ -53,24 +52,11 @@ int setupSocket(int *const socketFD, struct sockaddr_can *const addr){
     addr->can_family  = AF_CAN;
     addr->can_ifindex = ifr.ifr_ifindex;
 
-    // Bind to the socket
-    if(bind(*socketFD, (struct sockaddr *) addr, sizeof(struct sockaddr_can)) != 0){
-        perror("Error could not bind to the socket");
+    // Connect to the socket
+    if(connect(*socketFD, (struct sockaddr *) addr, sizeof(struct sockaddr_can)) != 0){
+        perror("Error could not connect to the socket");
         close(*socketFD);
         return ERR_SETUP_FAILED;
-    }
-
-    // Check if CANFD frame support should be enabled
-    if(CANFD){
-
-        int can_raw_fd_frames = 1;
-        if(setsockopt(*socketFD, SOL_CAN_RAW, CAN_RAW_FD_FRAMES, &can_raw_fd_frames, sizeof(can_raw_fd_frames)) != 0){
-            perror("Error setsockopt CAN_RAW_FD_FRAMES failed");
-            close(*socketFD);
-            return ERR_SETSOCKOPT_FAILED;
-        }
-
-        printf("Enabled CANFD frames support on the socket\n");
     }
 
     return RET_E_OK;
