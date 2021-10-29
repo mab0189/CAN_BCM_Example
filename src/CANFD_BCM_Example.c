@@ -95,13 +95,14 @@ int shutdownHandler(int retCode, int socketFD){
 }
 
 /**
- * Create a non cyclic transmission task for a CAN/CANFD frame
+ * Create a non cyclic transmission task for CAN/CANFD frames
  *
  * @param socketFD - The socket file descriptor
- * @param frame    - The CAN/CANFD frame that should be send
+ * @param frames   - The array of CAN/CANFD frames that should be send
+ * @param nframes  - The number of CAN/CANFD frames that should be send
  * @param isCANFD  - Flag for CANFD frames
  */
-void create_TX_SEND(int socketFD, void *frame, int isCANFD){
+void create_TX_SEND(int socketFD, void *frames, int nframes, int isCANFD){
 
     // BCM message with a single frame
     struct bcmMsgSingleFrame msg;
@@ -114,14 +115,20 @@ void create_TX_SEND(int socketFD, void *frame, int isCANFD){
         msg.msg_head.flags = CAN_FD_FRAME;
     }
 
-    // Because of the bcm_msg_head we always need to cast to a can_frame
-    msg.msg_head.frames[0] = *((struct can_frame*) frame);
-
-    // Send the TX_SEND configuration message.
     // Note: TX_SEND can only send one frame at a time unlike TX_SETUP!
-    if(send(socketFD, &msg, sizeof(struct bcmMsgSingleFrame), 0) < 0){
-        printf("Error could not write TX_SEND message \n");
-        shutdownHandler(ERR_TX_SEND_FAILED, socketFD);
+    // This is the reason why we must use a loop instead of a struct that
+    // can contain multiple frames.
+    for(int index = 0; index < nframes; index++){
+
+        // Because of the bcm_msg_head we always need to cast to a can_frame
+        msg.msg_head.frames[0] = ((struct can_frame *) frames)[index];
+
+        // Send the TX_SEND configuration message.
+        if(send(socketFD, &msg, sizeof(struct bcmMsgSingleFrame), 0) < 0){
+            printf("Error could not write TX_SEND message \n");
+            shutdownHandler(ERR_TX_SEND_FAILED, socketFD);
+        }
+
     }
 
 }
@@ -227,8 +234,7 @@ int main(){
 
 
     // TX_SEND Test
-    create_TX_SEND(socketFD, &frame1, 0);
-    create_TX_SEND(socketFD, &frame2, 0);
+    create_TX_SEND(socketFD, frameArr, 2, 0);
 
     // TX_SETUP Test
     create_TX_SETUP(socketFD, frameArr, 2, 10, ival1, ival2, 0);
