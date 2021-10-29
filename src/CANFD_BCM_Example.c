@@ -43,7 +43,7 @@
 /**
  * Struct for a BCM message with a single frame.
  */
-struct bcmMsgsingleFrame{
+struct bcmMsgSingleFrame{
     struct bcm_msg_head msg_head;
     struct can_frame frame[1];
 };
@@ -95,20 +95,18 @@ int shutdownHandler(int retCode, int socketFD){
 }
 
 /**
- * Sends a CAN/CANFD frame
+ * Create a non cyclic transmission task for a CAN/CANFD frame
  *
  * @param socketFD - The socket file descriptor
- * @param canID    - The CAN ID of the frame
  * @param frame    - The CAN/CANFD frame that should be send
  * @param isCANFD  - Flag for CANFD frames
  */
-void create_TX_SEND(int socketFD, uint32_t canID, void *frame, int isCANFD){
+void create_TX_SEND(int socketFD, void *frame, int isCANFD){
 
     // BCM message with a single frame
-    struct bcmMsgsingleFrame msg;
+    struct bcmMsgSingleFrame msg;
 
     msg.msg_head.opcode  = TX_SEND;
-    msg.msg_head.can_id  = canID;
     msg.msg_head.nframes = 1;
 
     // Check if it is a CANFD frame
@@ -119,8 +117,9 @@ void create_TX_SEND(int socketFD, uint32_t canID, void *frame, int isCANFD){
     // Because of the bcm_msg_head we always need to cast to a can_frame
     msg.msg_head.frames[0] = *((struct can_frame*) frame);
 
-    // Send the TX_SEND configuration message
-    if(send(socketFD, &msg, sizeof(struct bcmMsgsingleFrame), 0) < 0){
+    // Send the TX_SEND configuration message.
+    // Note: TX_SEND can only send one frame at a time unlike TX_SETUP!
+    if(send(socketFD, &msg, sizeof(struct bcmMsgSingleFrame), 0) < 0){
         printf("Error could not write TX_SEND message \n");
         shutdownHandler(ERR_TX_SEND_FAILED, socketFD);
     }
@@ -128,22 +127,22 @@ void create_TX_SEND(int socketFD, uint32_t canID, void *frame, int isCANFD){
 }
 
 /**
- * Create a cyclic transmission task for a CAN/CANFD frame
+ * Create a cyclic transmission task for CAN/CANFD frames
  *
  * @param socketFD - The socket file descriptor
- * @param canID    - The CAN ID of the frame
- * @param frame    - The CAN/CANFD frame that should be send cyclic
+ * @param frames   - The array of CAN/CANFD frames that should be send cyclic
+ * @param nframes  - The number of CAN/CANFD frames that should be send cyclic
  * @param isCANFD  - Flag for CANFD frames
  */
-void create_TX_SETUP(int socketFD, uint32_t canID, void *frame, uint32_t count,
+void create_TX_SETUP(int socketFD, void *frames, int nframes, uint32_t count,
                      struct bcm_timeval ival1, struct bcm_timeval ival2, int isCANFD){
 
-    // BCM message with a single frame
-    struct bcmMsgsingleFrame msg;
+    // BCM message with multiple frames
+    struct bcmMsgMultipleFrames msg;
 
     msg.msg_head.opcode  = TX_SETUP;
-    msg.msg_head.can_id  = canID;
-    msg.msg_head.nframes = 1;
+    //msg.msg_head.can_id  = canID;
+    msg.msg_head.nframes = nframes;
     msg.msg_head.count   = count;
     msg.msg_head.ival1   = ival1;
     msg.msg_head.ival2   = ival2;
@@ -156,12 +155,15 @@ void create_TX_SETUP(int socketFD, uint32_t canID, void *frame, uint32_t count,
     // Combine the flag values to immediately start the cyclic transmission task
     msg.msg_head.flags = msg.msg_head.flags | SETTIMER | STARTTIMER;
 
-    // Because of the bcm_msg_head we always need to cast to a can_frame
-    msg.msg_head.frames[0] = *((struct can_frame*) frame);
+    // Because of the bcm_msg_head we always need to cast to a can_frame.
+    for(int index = 0; index < nframes; index++){
+        //msg.msg_head.frames[index] =  *(((struct can_frame*) frames) + index);
+        msg.msg_head.frames[index] = ((struct can_frame *) frames)[index];
+    }
 
     // Send the TX_SEND configuration message
-    if(send(socketFD, &msg, sizeof(struct bcmMsgsingleFrame), 0) < 0){
-        printf("Error could not write TX_SEND message \n");
+    if(send(socketFD, &msg, sizeof(struct bcmMsgMultipleFrames), 0) < 0){
+        printf("Error could not send TX_SETUP message \n");
         shutdownHandler(ERR_TX_SEND_FAILED, socketFD);
     }
 
@@ -193,16 +195,28 @@ int main(){
 
 
     // Test Frame
-    struct can_frame frame;
+    struct can_frame frame1;
 
-    frame.can_id  = 0x123;
-    frame.can_dlc = 4;
-    frame.data[0] = 0xDE;
-    frame.data[1] = 0xAD;
-    frame.data[2] = 0xBE;
-    frame.data[3] = 0xEF;
+    frame1.can_id  = 0x123;
+    frame1.can_dlc = 4;
+    frame1.data[0] = 0xDE;
+    frame1.data[1] = 0xAD;
+    frame1.data[2] = 0xBE;
+    frame1.data[3] = 0xEF;
 
-    // Test intervalls
+    struct can_frame frame2;
+
+    frame2.can_id  = 0x345;
+    frame2.can_dlc = 3;
+    frame2.data[0] = 0xC0;
+    frame2.data[1] = 0xFF;
+    frame2.data[2] = 0xEE;
+
+    struct can_frame frameArr[2];
+    frameArr[0] = frame1;
+    frameArr[1] = frame2;
+
+    // Test intervals
     struct bcm_timeval ival1;
     ival1.tv_sec  = 0;
     ival1.tv_usec = 500;
@@ -211,11 +225,14 @@ int main(){
     ival2.tv_sec  = 1;
     ival2.tv_usec = 0;
 
+
     // TX_SEND Test
-    create_TX_SEND(socketFD, 0x123, &frame, 0);
+    create_TX_SEND(socketFD, &frame1, 0);
+    create_TX_SEND(socketFD, &frame2, 0);
 
     // TX_SETUP Test
-    create_TX_SETUP(socketFD, 0x123, &frame, 10, ival1, ival2, 0);
+    create_TX_SETUP(socketFD, frameArr, 2, 10, ival1, ival2, 0);
+
 
     while(keepRunning){
         // Run until stopped

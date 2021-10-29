@@ -13,9 +13,6 @@
 /*******************************************************************************
  * DEFINES
  ******************************************************************************/
-#define FRAMEID      0x222      // The changed ID of the frames we are sending back
-
-#define CANFD        0          // Flag for enabling CANFD
 #define INTERFACE    "vcan0"    // The name of the interface that should be configured
 
 #define VERBOSE      1          // Enables printing information during the recv-send loop
