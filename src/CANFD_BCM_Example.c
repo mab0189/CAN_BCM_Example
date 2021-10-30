@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -45,7 +46,7 @@
  */
 struct bcmMsgSingleFrame{
     struct bcm_msg_head msg_head;
-    struct can_frame frame[1];
+    struct can_frame canFrame[1];
 };
 
 /**
@@ -53,7 +54,7 @@ struct bcmMsgSingleFrame{
  */
  struct bcmMsgMultipleFrames{
      struct bcm_msg_head msg_head;
-     struct can_frame frames[MAXFRAMES];
+     struct can_frame canFrames[MAXFRAMES];
  };
 
 
@@ -84,11 +85,11 @@ static void handleTerminationSignal(int signumber){
  * @param retCode  - The return code
  * @param socketFD - The socket file descriptor
  */
-int shutdownHandler(int retCode, int socketFD){
+int shutdownHandler(int retCode, int const *const socketFD){
 
     // Close the socket
-    if(socketFD != -1){
-        close(socketFD);
+    if(*socketFD != -1){
+        close(*socketFD);
     }
 
     exit(retCode);
@@ -102,13 +103,17 @@ int shutdownHandler(int retCode, int socketFD){
  * @param nframes  - The number of CAN/CANFD frames that should be send
  * @param isCANFD  - Flag for CANFD frames
  */
-void create_TX_SEND(int socketFD, void *frames, int nframes, int isCANFD){
+void create_TX_SEND(int const *const socketFD, void *const frames, int nframes, int isCANFD){
 
     // BCM message with a single frame
     struct bcmMsgSingleFrame msg;
 
-    msg.msg_head.opcode  = TX_SEND;
-    msg.msg_head.nframes = 1;
+    // Note: Always initialize the whole struct with 0.
+    // Random values in the memory can cause weird bugs!
+    memset(&msg, 0, sizeof(msg));
+
+    msg.msg_head.opcode          = TX_SEND;
+    msg.msg_head.nframes         = 1;
 
     // Check if it is a CANFD frame
     if(isCANFD) {
@@ -121,10 +126,10 @@ void create_TX_SEND(int socketFD, void *frames, int nframes, int isCANFD){
     for(int index = 0; index < nframes; index++){
 
         // Because of the bcm_msg_head we always need to cast to a can_frame
-        msg.msg_head.frames[0] = ((struct can_frame *) frames)[index];
+        msg.canFrame[0] = ((struct can_frame*) frames)[index];
 
         // Send the TX_SEND configuration message.
-        if(send(socketFD, &msg, sizeof(struct bcmMsgSingleFrame), 0) < 0){
+        if(send(*socketFD, &msg, sizeof(msg), 0) < 0){
             printf("Error could not write TX_SEND message \n");
             shutdownHandler(ERR_TX_SEND_FAILED, socketFD);
         }
@@ -141,18 +146,21 @@ void create_TX_SEND(int socketFD, void *frames, int nframes, int isCANFD){
  * @param nframes  - The number of CAN/CANFD frames that should be send cyclic
  * @param isCANFD  - Flag for CANFD frames
  */
-void create_TX_SETUP(int socketFD, void *frames, int nframes, uint32_t count,
+void create_TX_SETUP(int const *const socketFD, void *const frames, int nframes, uint32_t count,
                      struct bcm_timeval ival1, struct bcm_timeval ival2, int isCANFD){
 
     // BCM message with multiple frames
     struct bcmMsgMultipleFrames msg;
 
-    msg.msg_head.opcode  = TX_SETUP;
-    //msg.msg_head.can_id  = canID;
-    msg.msg_head.nframes = nframes;
-    msg.msg_head.count   = count;
-    msg.msg_head.ival1   = ival1;
-    msg.msg_head.ival2   = ival2;
+    // Note: Always initialize the whole struct with 0.
+    // Random values in the memory can cause weird bugs!
+    memset(&msg, 0, sizeof(msg));
+
+    msg.msg_head.opcode          = TX_SETUP;
+    msg.msg_head.count           = count;
+    msg.msg_head.ival1           = ival1;
+    msg.msg_head.ival2           = ival2;
+    msg.msg_head.nframes         = nframes;
 
     // Check if it is a CANFD frame
     if(isCANFD) {
@@ -162,18 +170,78 @@ void create_TX_SETUP(int socketFD, void *frames, int nframes, uint32_t count,
     // Combine the flag values to immediately start the cyclic transmission task
     msg.msg_head.flags = msg.msg_head.flags | SETTIMER | STARTTIMER;
 
-    // Because of the bcm_msg_head we always need to cast to a can_frame.
     for(int index = 0; index < nframes; index++){
-        //msg.msg_head.frames[index] =  *(((struct can_frame*) frames) + index);
-        msg.msg_head.frames[index] = ((struct can_frame *) frames)[index];
+        // Because of the bcm_msg_head we always need to cast to a can_frame
+        msg.canFrames[index] = ((struct can_frame*) frames)[index];
     }
 
-    // Send the TX_SEND configuration message
-    if(send(socketFD, &msg, sizeof(struct bcmMsgMultipleFrames), 0) < 0){
+    // Send the TX_SETUP configuration message
+    if(send(*socketFD, &msg, sizeof(msg), 0) < 0){
         printf("Error could not send TX_SETUP message \n");
-        shutdownHandler(ERR_TX_SEND_FAILED, socketFD);
+        shutdownHandler(ERR_TX_SETUP_FAILED, socketFD);
     }
 
+}
+
+/**
+ * Creates a RX filter for the CAN ID
+ *
+ * @param socketFD - The socket file descriptor
+ * @param canID    - The CAN ID that should be added to the RX filter
+ */
+void create_RX_SETUP_CANID(int const *const socketFD, int canID){
+
+    // BCM message with a single frame
+    struct bcmMsgSingleFrame msg;
+
+    // Note: Always initialize the whole struct with 0.
+    // Random values in the memory can cause weird bugs!
+    memset(&msg, 0, sizeof(msg));
+
+    msg.msg_head.opcode          = RX_SETUP;
+    msg.msg_head.flags           = RX_FILTER_ID;
+    msg.msg_head.can_id          = canID;
+
+    // Send the RX_SETUP configuration message
+    if(send(*socketFD, &msg, sizeof(msg), 0) < 0){
+        printf("Error could not send RX_SETUP message \n");
+        shutdownHandler(ERR_RX_SETUP_FAILED, socketFD);
+    }
+
+}
+
+/**
+ * Processes the next operation of the queue from the simulation
+ *
+ * @param socketFD - The socket file descriptor
+ */
+void process_operation(int const* const socketFD){
+
+    // Get operation from queue
+
+    // Check what we need to do: send, send cyclic, add CAN ID to RX filter etc...
+
+    // Process operation
+
+    printf("Processed operation task from the simulation \n");
+}
+
+/**
+ * Receive CAN/CANFD frame and put the extracted data in the queue to the simulation
+ *
+ * @param socketFD - The socket file descriptor
+ */
+void process_receive(int const* const socketFD){
+
+    // Receive
+
+    // Check if there was sth to receive
+
+    // Check operation value
+
+    // Process operation
+
+    printf("Put operation in the queue for the simulation to process \n");
 }
 
 int main(){
@@ -189,13 +257,13 @@ int main(){
 
     if(sigaction(SIGINT, &sigAction, NULL) < 0){
         printf("Setting signal handler for SIGINT failed \n");
-        shutdownHandler(ERR_SIGACTION_FAILED, socketFD);
+        shutdownHandler(ERR_SIGACTION_FAILED, &socketFD);
     }
 
     // Set up the socket
-    if(setupSocket(&socketFD, &socketAddr) != 0){
+    if(setupSocket(&socketFD, &socketAddr, 0) != 0){
         printf("Error could not setup the socket \n");
-        shutdownHandler(ERR_SETUP_FAILED, socketFD);
+        shutdownHandler(ERR_SETUP_FAILED, &socketFD);
     }
 
     printf("Setup the socket on the interface %s\n", INTERFACE);
@@ -232,20 +300,32 @@ int main(){
     ival2.tv_sec  = 1;
     ival2.tv_usec = 0;
 
+    // Test RX
+    size_t numbytes = 0;
+    struct bcmMsgSingleFrame rxMsg;
+
 
     // TX_SEND Test
-    create_TX_SEND(socketFD, frameArr, 2, 0);
+    create_TX_SEND(&socketFD, frameArr, 2, 0);
 
     // TX_SETUP Test
-    create_TX_SETUP(socketFD, frameArr, 2, 10, ival1, ival2, 0);
+    create_TX_SETUP(&socketFD, frameArr, 2, 10, ival1, ival2, 0);
 
+    // RX_SETUP Test
+    create_RX_SETUP_CANID(&socketFD, 0x222);
 
+    // Keep running until stopped
     while(keepRunning){
-        // Run until stopped
+
+        // Process operation message from the queue
+        process_operation(&socketFD);
+
+        // Receive on the socket
+        process_receive(&socketFD);
     }
 
     // Call the shutdown handler
-    shutdownHandler(RET_E_OK, socketFD);
+    shutdownHandler(RET_E_OK, &socketFD);
     return RET_E_OK;
 }
 

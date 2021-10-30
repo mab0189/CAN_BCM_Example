@@ -17,8 +17,11 @@
 #define ERR_SIGACTION_FAILED        -1
 #define ERR_IF_NOT_FOUND            -2
 #define ERR_SOCKET_FAILED           -3
-#define ERR_SETUP_FAILED            -4
-#define ERR_TX_SEND_FAILED          -5
+#define ERR_FCNTL_FAILED            -4
+#define ERR_SETUP_FAILED            -5
+#define ERR_TX_SEND_FAILED          -6
+#define ERR_TX_SETUP_FAILED         -7
+#define ERR_RX_SETUP_FAILED         -8
 
 #endif //CANFD_BCM_ERROR_H
 

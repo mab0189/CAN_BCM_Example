@@ -21,13 +21,14 @@
 #include <stdio.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 
 /*******************************************************************************
  * FUNCTION DEFINITIONS
  ******************************************************************************/
 
-int setupSocket(int *const socketFD, struct sockaddr_can *const addr){
+int setupSocket(int *const socketFD, struct sockaddr_can *const addr, int isBlocking){
 
     // Get the socket file descriptor for ioctl
     *socketFD = socket(PF_CAN, SOCK_DGRAM, CAN_BCM);
@@ -57,6 +58,17 @@ int setupSocket(int *const socketFD, struct sockaddr_can *const addr){
         perror("Error could not connect to the socket");
         close(*socketFD);
         return ERR_SETUP_FAILED;
+    }
+
+    // Put the socket in non-blocking mode
+    if(!isBlocking) {
+
+        if (fcntl(*socketFD, F_SETFL, fcntl(*socketFD, F_GETFL) | O_NONBLOCK) < 0) {
+            printf("Setting socket to non blocking mode failed \n");
+            close(*socketFD);
+            return ERR_FCNTL_FAILED;
+        }
+
     }
 
     return RET_E_OK;

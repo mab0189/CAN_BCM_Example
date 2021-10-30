@@ -24,11 +24,13 @@
 /**
  * Creates a CAN/CANFD BCM socket on an interface.
  * Support for CANFD frames can be enabled if needed.
+ * Support for non blocking receive can be enabled if needed.
  *
- * @param socketFD - Storage for the created socket descriptor
- * @param addr     - Storage for the sockaddr_can of the socket
+ * @param socketFD   - Storage for the created socket descriptor
+ * @param addr       - Storage for the sockaddr_can of the socket
+ * @param isBlocking - Flag for blocking
  */
-extern int setupSocket(int *socketFD, struct sockaddr_can *addr);
+extern int setupSocket(int *socketFD, struct sockaddr_can *addr, int isBlocking);
 
 
 #endif //CANFD_BCM_SOCKET_H
