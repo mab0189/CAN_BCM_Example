@@ -14,6 +14,7 @@
 #include "CANFD_BCM_Error.h"
 #include "CANFD_BCM_Config.h"
 #include "CANFD_BCM_Socket.h"
+#include <errno.h>
 #include <linux/can.h>
 #include <linux/can/bcm.h>
 #include <signal.h>
@@ -103,7 +104,7 @@ int shutdownHandler(int retCode, int const *const socketFD){
  * @param nframes  - The number of CAN/CANFD frames that should be send
  * @param isCANFD  - Flag for CANFD frames
  */
-void create_TX_SEND(int const *const socketFD, void *const frames, int nframes, int isCANFD){
+void createTxSend(int const *const socketFD, void *const frames, int nframes, int isCANFD){
 
     // BCM message with a single frame
     struct bcmMsgSingleFrame msg;
@@ -146,7 +147,7 @@ void create_TX_SEND(int const *const socketFD, void *const frames, int nframes, 
  * @param nframes  - The number of CAN/CANFD frames that should be send cyclic
  * @param isCANFD  - Flag for CANFD frames
  */
-void create_TX_SETUP(int const *const socketFD, void *const frames, int nframes, uint32_t count,
+void createTxSetup(int const *const socketFD, void *const frames, int nframes, uint32_t count,
                      struct bcm_timeval ival1, struct bcm_timeval ival2, int isCANFD){
 
     // BCM message with multiple frames
@@ -189,7 +190,7 @@ void create_TX_SETUP(int const *const socketFD, void *const frames, int nframes,
  * @param socketFD - The socket file descriptor
  * @param canID    - The CAN ID that should be added to the RX filter
  */
-void create_RX_SETUP_CANID(int const *const socketFD, int canID){
+void createRxSetupCanID(int const *const socketFD, int canID){
 
     // BCM message with a single frame
     struct bcmMsgSingleFrame msg;
@@ -215,7 +216,7 @@ void create_RX_SETUP_CANID(int const *const socketFD, int canID){
  *
  * @param socketFD - The socket file descriptor
  */
-void process_operation(int const* const socketFD){
+void processOperation(int const* const socketFD){
 
     // Get operation from queue
 
@@ -227,21 +228,82 @@ void process_operation(int const* const socketFD){
 }
 
 /**
+ * Processes the timeout of a cyclic CAN/CANFD message
+ *
+ * @param msg - The received timeout message from the BCM socket
+ */
+void processTimeout(struct bcmMsgSingleFrame const* msg){
+
+    //TODO: What do we do in this case?
+
+    printf("Timeout occurred! \n");
+}
+
+/**
+ * Processes the content change of a CAN/CANFD message
+ *
+ * @param msg - The received content change message from the BCM socket
+ */
+void processContentChange(struct bcmMsgSingleFrame const* msg){
+
+    //TODO:
+    // 1. Extract needed information
+    // 2. Map information to the Event
+    // 3. Put the event in the queue
+
+    printf("Content changed! \n");
+}
+
+/**
  * Receive CAN/CANFD frame and put the extracted data in the queue to the simulation
  *
  * @param socketFD - The socket file descriptor
  */
-void process_receive(int const* const socketFD){
+void processReceive(int const* const socketFD){
 
-    // Receive
+    int nbytes = 0;               // Number of bytes we received
+    struct bcmMsgSingleFrame msg; // The buffer that stores the received message
 
-    // Check if there was sth to receive
+    // Note: Always initialize the whole struct with 0.
+    // Random values in the memory can cause weird bugs!
+    memset(&msg, 0, sizeof(msg));
 
-    // Check operation value
+    // "Reset" errno before calling recv that sets errno on failure
+    errno = 0;
 
-    // Process operation
+    // Receive on the BCM socket
+    nbytes = recv(*socketFD, &msg, sizeof(msg), 0);
 
-    printf("Put operation in the queue for the simulation to process \n");
+    // Check validity of the received message
+    if(nbytes < 0){
+
+        // Check if there was an actual error or if there was nothing received on the socket.
+        // This can happen when the socket is set to be non blocking.
+        if(errno != EAGAIN && errno != EWOULDBLOCK){
+            printf("Error could not receive on the socket \n");
+            shutdownHandler(ERR_RECV_FAILED, socketFD);
+        }
+
+        // There was nothing to receive so we can exit early
+        return;
+
+    }else if(nbytes  != sizeof(msg)){
+        printf("Error received unexpected number of bytes \n");
+        shutdownHandler(ERR_RECV_FAILED, socketFD);
+    }
+
+    // Check if we got one of the expected operation codes:
+    // RX_CHANGED: Simple reception of a CAN/CANFD frame or a content change occurred.
+    // RX_TIMEOUT: Cyclic message is detected to be absent.
+    if(msg.msg_head.opcode != RX_CHANGED && msg.msg_head.opcode != RX_TIMEOUT){
+        printf("Error received returned unexpected operation code \n");
+        shutdownHandler(ERR_RECV_FAILED, socketFD);
+    }else if(msg.msg_head.opcode == RX_TIMEOUT){
+        processTimeout(&msg);
+    }else{
+        processContentChange(&msg);
+    }
+
 }
 
 int main(){
@@ -306,22 +368,22 @@ int main(){
 
 
     // TX_SEND Test
-    create_TX_SEND(&socketFD, frameArr, 2, 0);
+    createTxSend(&socketFD, frameArr, 2, 0);
 
     // TX_SETUP Test
-    create_TX_SETUP(&socketFD, frameArr, 2, 10, ival1, ival2, 0);
+    createTxSetup(&socketFD, frameArr, 2, 10, ival1, ival2, 0);
 
     // RX_SETUP Test
-    create_RX_SETUP_CANID(&socketFD, 0x222);
+    createRxSetupCanID(&socketFD, 0x222);
 
     // Keep running until stopped
     while(keepRunning){
 
         // Process operation message from the queue
-        process_operation(&socketFD);
+        processOperation(&socketFD);
 
         // Receive on the socket
-        process_receive(&socketFD);
+        processReceive(&socketFD);
     }
 
     // Call the shutdown handler

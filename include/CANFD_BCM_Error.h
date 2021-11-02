@@ -22,6 +22,7 @@
 #define ERR_TX_SEND_FAILED          -6
 #define ERR_TX_SETUP_FAILED         -7
 #define ERR_RX_SETUP_FAILED         -8
+#define ERR_RECV_FAILED             -9
 
 #endif //CANFD_BCM_ERROR_H
 
