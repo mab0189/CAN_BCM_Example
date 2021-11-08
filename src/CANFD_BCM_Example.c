@@ -355,16 +355,18 @@ void createRxSetupMask(int const *const socketFD, int canID, struct canfd_frame 
     if(isCANFD){
         struct bcmMsgSingleFrameCanFD *msgCANFD = (struct bcmMsgSingleFrameCanFD *) msg;
 
-        msgCANFD->msg_head.opcode = RX_SETUP;
-        msgCANFD->msg_head.flags  = CAN_FD_FRAME;
-        msgCANFD->msg_head.can_id = canID;
+        msgCANFD->msg_head.opcode  = RX_SETUP;
+        msgCANFD->msg_head.flags   = CAN_FD_FRAME;
+        msgCANFD->msg_head.can_id  = canID;
+        msgCANFD->msg_head.nframes = 1;
 
         msgCANFD->canfdFrame[0]   = mask;
     }else{
         struct bcmMsgSingleFrameCan *msgCAN = (struct bcmMsgSingleFrameCan *) msg;
 
-        msgCAN->msg_head.opcode   = RX_SETUP;
-        msgCAN->msg_head.can_id   = canID;
+        msgCAN->msg_head.opcode    = RX_SETUP;
+        msgCAN->msg_head.can_id    = canID;
+        msgCAN->msg_head.nframes   = 1;
 
         msgCAN->canFrame[0]       = *((struct can_frame*) &mask);
     }
