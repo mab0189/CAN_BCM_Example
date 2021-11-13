@@ -597,7 +597,7 @@ int main(){
 
     // TX_SEND Test
     //createTxSend(&socketFD, frameArrCAN, 2, 0);
-    //createTxSend(&socketFD, frameArrCANFD, 2, 1);
+    createTxSend(&socketFD, frameArrCANFD, 2, 1);
 
     // TX_SETUP Sequence Test
     //createTxSetupSequence(&socketFD, frameArrCAN, 2, 10, ival1, ival2, 0);

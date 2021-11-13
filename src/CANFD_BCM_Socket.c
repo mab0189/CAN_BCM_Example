@@ -60,6 +60,9 @@ int setupSocket(int *const socketFD, struct sockaddr_can *const addr, int isBloc
         return ERR_SETUP_FAILED;
     }
 
+    // Note: In contrast to a raw CAN socket there is no need to
+    // explicitly enable CANFD for an BCM socket with setsockopt!
+
     // Put the socket in non-blocking mode
     if(!isBlocking) {
 
