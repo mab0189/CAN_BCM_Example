@@ -33,7 +33,7 @@
 /**
  * Defines how many frames can be put in a bcmMsgMultipleFrames operation.
  * The socketCAN BCM can send up to 256 CAN frames in a sequence in the case
- * of a cyclic TX task configuration (=> check socketCAN documentation).
+ * of a cyclic TX task configuration. Check the socketCAN documentation.
  */
 #define MAXFRAMES 256
 
@@ -86,9 +86,9 @@ volatile int keepRunning = 1; // Keep running till CTRL + F is pressed
  ******************************************************************************/
 
 /**
- * Process termination signal
+ * Process termination signal.
  *
- * @param signumber Signal number which occurred
+ * @param signumber The number of the signal that occurred.
  */
 static void handleTerminationSignal(int signumber){
 
@@ -97,10 +97,10 @@ static void handleTerminationSignal(int signumber){
 }
 
 /**
- * Handles the shutdown procedure
+ * Handles the shutdown procedure.
  *
- * @param retCode  - The return code
- * @param socketFD - The socket file descriptor
+ * @param retCode  - The return code.
+ * @param socketFD - The socket file descriptor.
  */
 void shutdownHandler(int retCode, int const *const socketFD){
 
@@ -115,10 +115,10 @@ void shutdownHandler(int retCode, int const *const socketFD){
 /**
  * Create a non cyclic transmission task for multiple CAN/CANFD frames.
  *
- * @param socketFD - The socket file descriptor
- * @param frames   - The array of CAN/CANFD frames that should be send
- * @param nframes  - The number of CAN/CANFD frames that should be send
- * @param isCANFD  - Flag for CANFD frames
+ * @param socketFD - The socket file descriptor.
+ * @param frames   - The array of CAN/CANFD frames that should be send.
+ * @param nframes  - The number of CAN/CANFD frames that should be send.
+ * @param isCANFD  - Flag for CANFD frames.
  */
 void createTxSend(int const *const socketFD, struct canfd_frame frames[], int nframes, int isCANFD){
 
@@ -193,14 +193,14 @@ void createTxSend(int const *const socketFD, struct canfd_frame frames[], int nf
  * a new cyclic transmission task will be created. There will be a delay
  * between the frames.
  *
- * @param socketFD - The socket file descriptor
- * @param frames   - The array of CAN/CANFD frames that should be send cyclic
- * @param nframes  - The number of CAN/CANFD frames that should be send cyclic
+ * @param socketFD - The socket file descriptor.
+ * @param frames   - The array of CAN/CANFD frames that should be send cyclic.
+ * @param nframes  - The number of CAN/CANFD frames that should be send cyclic.
  * @param count    - Number of times the frame is send with the first interval.
  *                   If count is zero only the second interval is being used.
  * @param ival1    - First interval.
  * @param ival2    - Second interval.
- * @param isCANFD  - Flag for CANFD frames
+ * @param isCANFD  - Flag for CANFD frames.
  */
 void createTxSetup(int const *const socketFD, struct canfd_frame frames[], int nframes, const uint32_t count[],
                            struct bcm_timeval ival1[], struct bcm_timeval ival2[], int isCANFD){
@@ -296,14 +296,14 @@ void createTxSetup(int const *const socketFD, struct canfd_frame frames[], int n
  * Note: The cyclic transmission task for the sequence can only be deleted
  * with the CAN ID that was set in the bcm_msg_head!
  *
- * @param socketFD - The socket file descriptor
- * @param frames   - The array of CAN/CANFD frames that should be send cyclic
- * @param nframes  - The number of CAN/CANFD frames that should be send cyclic
+ * @param socketFD - The socket file descriptor.
+ * @param frames   - The array of CAN/CANFD frames that should be send cyclic.
+ * @param nframes  - The number of CAN/CANFD frames that should be send cyclic.
  * @param count    - Number of times the frame is send with the first interval.
  *                   If count is zero only the second interval is being used.
  * @param ival1    - First interval.
  * @param ival2    - Second interval.
- * @param isCANFD  - Flag for CANFD frames
+ * @param isCANFD  - Flag for CANFD frames.
  */
 void createTxSetupSequence(int const *const socketFD, struct canfd_frame frames[], int nframes, uint32_t count,
                            struct bcm_timeval ival1, struct bcm_timeval ival2, int isCANFD){
@@ -387,8 +387,9 @@ void createTxSetupSequence(int const *const socketFD, struct canfd_frame frames[
  * in the bcm_msg_head the cyclic transmission of all frames in the sequence
  * will be stopped.
  *
- * @param socketFD
- * @param canID
+ * @param socketFD - The socket file descriptor.
+ * @param canID    - The CAN ID of the cyclic transmission task that should be removed.
+ * @param isCANFD  - Flag for CANFD frames.
  */
 void createTxDelete(int const *const socketFD, canid_t canID, int isCANFD){
 
@@ -416,9 +417,9 @@ void createTxDelete(int const *const socketFD, canid_t canID, int isCANFD){
  * Creates a RX filter for the CAN ID.
  * I. e. we get notified on all received frames with this CAN ID!
  *
- * @param socketFD - The socket file descriptor
- * @param canID    - The CAN ID that should be added to the RX filter
- * @param isCANFD  - Flag for CANFD frames
+ * @param socketFD - The socket file descriptor.
+ * @param canID    - The CAN ID that should be added to the RX filter.
+ * @param isCANFD  - Flag for CANFD frames.
  */
 void createRxSetupCanID(int const *const socketFD, canid_t canID, int isCANFD){
 
@@ -447,10 +448,10 @@ void createRxSetupCanID(int const *const socketFD, canid_t canID, int isCANFD){
  * Creates a RX filter for the CAN ID and the relevant bits of the frame.
  * I. e. we only get notified on changes for the set bits in the mask.
  *
- * @param socketFD - The socket file descriptor
- * @param canID    - The CAN ID that should be added to the RX filter
- * @param mask     - The mask for the relevant bits of the frame
- * @param isCANFD  - Flag for CANFD frames
+ * @param socketFD - The socket file descriptor.
+ * @param canID    - The CAN ID that should be added to the RX filter.
+ * @param mask     - The mask for the relevant bits of the frame.
+ * @param isCANFD  - Flag for CANFD frames.
  */
 void createRxSetupMask(int const *const socketFD, canid_t canID, struct canfd_frame mask, int isCANFD){
 
@@ -504,12 +505,13 @@ void createRxSetupMask(int const *const socketFD, canid_t canID, struct canfd_fr
 }
 
 /**
- * Removes a RX filter for the CAN ID
+ * Removes a RX filter for the CAN ID.
  *
- * @param socketFD
- * @param canID
+ * @param socketFD - The socket file descriptor.
+ * @param canID    - The CAN ID that should be removed from the RX filter.
+ * @param isCANFD  - Flag for CANFD frames.
  */
-void createRxDelete(int const *const socketFD, canid_t canID){
+void createRxDelete(int const *const socketFD, canid_t canID, int isCANFD){
 
     struct bcm_msg_head msg;
 
@@ -520,6 +522,10 @@ void createRxDelete(int const *const socketFD, canid_t canID){
     msg.opcode = RX_DELETE;
     msg.can_id = canID;
 
+    if(isCANFD){
+        msg.flags = CAN_FD_FRAME;
+    }
+
     // Send the RX_DELETE configuration message
     if(send(*socketFD, &msg, sizeof(msg), 0) < 0){
         printf("Error could not send RX_DELETE message \n");
@@ -528,9 +534,9 @@ void createRxDelete(int const *const socketFD, canid_t canID){
 }
 
 /**
- * Processes the next operation of the queue from the simulation
+ * Processes the next operation of the queue from the simulation.
  *
- * @param socketFD - The socket file descriptor
+ * @param socketFD - The socket file descriptor.
  */
 void processOperation(int const* const socketFD){
 
@@ -544,9 +550,9 @@ void processOperation(int const* const socketFD){
 }
 
 /**
- * Processes the timeout of a cyclic CAN/CANFD message
+ * Processes the timeout of a cyclic CAN/CANFD message.
  *
- * @param msg - The received timeout message from the BCM socket
+ * @param msg - The received timeout message from the BCM socket.
  */
 void processTimeout(struct bcmMsgSingleFrameCanFD const* const msg){
 
@@ -556,9 +562,9 @@ void processTimeout(struct bcmMsgSingleFrameCanFD const* const msg){
 }
 
 /**
- * Processes the content change of a CAN/CANFD message
+ * Processes the content change of a CAN/CANFD message.
  *
- * @param msg - The received content change message from the BCM socket
+ * @param msg - The received content change message from the BCM socket.
  */
 void processContentChange(struct bcmMsgSingleFrameCanFD const* const msg){
 
@@ -571,9 +577,9 @@ void processContentChange(struct bcmMsgSingleFrameCanFD const* const msg){
 }
 
 /**
- * Receive CAN/CANFD frame and put the extracted data in the queue to the simulation
+ * Receive CAN/CANFD frame and put the extracted data in the queue to the simulation.
  *
- * @param socketFD - The socket file descriptor
+ * @param socketFD - The socket file descriptor.
  */
 void processReceive(int const* const socketFD){
 
@@ -741,9 +747,8 @@ int main(){
     //createTxSetup(&socketFD, frameArrCAN, 2, countArr, ivalArr1, ivalArr2,0);
     //sleep(10);
 
-    createTxSetup(&socketFD, frameArrCANFD, 2, countArr, ivalArr1, ivalArr2, 1);
-    sleep(10);
-
+    //createTxSetup(&socketFD, frameArrCANFD, 2, countArr, ivalArr1, ivalArr2, 1);
+    //sleep(10);
 
     // TX_SETUP Sequence Test
     //createTxSetupSequence(&socketFD, frameArrCAN, 2, 10, ival1, ival2, 0);
@@ -751,7 +756,6 @@ int main(){
 
     //createTxSetupSequence(&socketFD, frameArrCANFD, 2, 10, ival1, ival2, 1);
     //sleep(10);
-
 
     // TX_DELETE Test
     //createTxSetupSequence(&socketFD, &frame3, 1, 10, ival1, ival2, 1);
@@ -764,20 +768,17 @@ int main(){
     //createTxDelete(&socketFD, frame3.can_id, 1);
     //sleep(10);
 
-
     // RX_SETUP CAN ID Test
     //createRxSetupCanID(&socketFD, 0x222, 0);
     //createRxSetupCanID(&socketFD, 0x333, 1);
 
-
     // RX_SETUP CAN ID + Mask Test
-    //createRxSetupMask(&socketFD, 0x444, mask, 0);
-    //createRxSetupMask(&socketFD, 0x555, mask, 1);
-
+    //createRxSetupMask(&socketFD, 0x222, mask, 0);
+    //createRxSetupMask(&socketFD, 0x333, mask, 1);
 
     // RX_DELETE Test
-    //createRxDelete(&socketFD, 0x333);
-
+    //createRxDelete(&socketFD, 0x222, 0);
+    //createTxDelete(&socketFD, 0x333, 1);
 
     // Keep running until stopped
     //while(keepRunning){
