@@ -163,11 +163,13 @@ void createTxSend(int const *const socketFD, struct canfd_frame frames[], int nf
 
         if(isCANFD){
             struct bcmMsgSingleFrameCanFD *msgCANFD = (struct bcmMsgSingleFrameCanFD *) msg;
-            msgCANFD->canfdFrame[0] = frames[index];
+            msgCANFD->msg_head.can_id = frames[index].can_id;
+            msgCANFD->canfdFrame[0]   = frames[index];
         }else{
             struct bcmMsgSingleFrameCan *msgCAN = (struct bcmMsgSingleFrameCan *) msg;
             struct can_frame* canFrame = (struct can_frame *) &frames[index];
-            msgCAN->canFrame[0] = *canFrame;
+            msgCAN->msg_head.can_id = canFrame->can_id;
+            msgCAN->canFrame[0]     = *canFrame;
         }
 
         // Send the TX_SEND configuration message.
@@ -186,12 +188,121 @@ void createTxSend(int const *const socketFD, struct canfd_frame frames[], int nf
 
 /**
  * Create a cyclic transmission task for one or multiple CAN/CANFD frames.
- * If more than one frame should be send cyclic the provided sequence of
- * the frames is kept by the BCM.
+ *
+ * Note: The frames will not be send as a atomic sequence. For each frame
+ * a new cyclic transmission task will be created. There will be a delay
+ * between the frames.
  *
  * @param socketFD - The socket file descriptor
  * @param frames   - The array of CAN/CANFD frames that should be send cyclic
  * @param nframes  - The number of CAN/CANFD frames that should be send cyclic
+ * @param count    - Number of times the frame is send with the first interval.
+ *                   If count is zero only the second interval is being used.
+ * @param ival1    - First interval.
+ * @param ival2    - Second interval.
+ * @param isCANFD  - Flag for CANFD frames
+ */
+void createTxSetup(int const *const socketFD, struct canfd_frame frames[], int nframes, const uint32_t count[],
+                           struct bcm_timeval ival1[], struct bcm_timeval ival2[], int isCANFD){
+
+    // BCM message we are sending with multiple CAN or CANFD frame
+    void* msg      = NULL;
+    size_t msgSize = 0;
+
+    // Check if we are sending CAN or CANFD frames.
+    if(isCANFD){
+        msgSize = sizeof(struct bcmMsgSingleFrameCanFD);
+        msg = malloc(msgSize);
+    }else{
+        msgSize = sizeof(struct bcmMsgSingleFrameCan);
+        msg = malloc(msgSize);
+    }
+
+    // Error handling
+    if(msg == NULL){
+        printf("Error could not allocate memory for the message \n");
+        shutdownHandler(ERR_MALLOC_FAILED, socketFD);
+    }
+
+    // Note: Always initialize the whole struct with 0.
+    // Random values in the memory can cause weird bugs!
+    memset(msg, 0, msgSize);
+
+    // Note: By combining the flags SETTIMER and STARTTIMER
+    // the BCM will start sending the messages immediately
+    if(isCANFD){
+        struct bcmMsgSingleFrameCanFD *msgCANFD = (struct bcmMsgSingleFrameCanFD *) msg;
+
+        msgCANFD->msg_head.opcode  = TX_SETUP;
+        msgCANFD->msg_head.flags   = CAN_FD_FRAME | SETTIMER | STARTTIMER;
+        msgCANFD->msg_head.nframes = 1;
+
+    }else{
+        struct bcmMsgSingleFrameCan *msgCAN = (struct bcmMsgSingleFrameCan *) msg;
+
+        msgCAN->msg_head.opcode    = TX_SETUP;
+        msgCAN->msg_head.flags     = SETTIMER | STARTTIMER;
+        msgCAN->msg_head.nframes   = 1;
+    }
+
+    // Note: We send for each TX_SETUP a single CAN/CANFD frame with its CAN ID in the
+    // bcm_msg_head. This way we do not create a cyclic transmission sequence which can
+    // only be removed with the CAN ID that was set in the bcm_msg_head. Another benefit
+    // is that each CAN/CANFD frame can have different count, ival1, and ival2 values.
+    for(int index = 0; index < nframes; index++){
+
+        // Fill out the CAN ID and frame data
+        if(isCANFD){
+            struct bcmMsgSingleFrameCanFD *msgCANFD = (struct bcmMsgSingleFrameCanFD *) msg;
+            struct canfd_frame *canfdFrame = &frames[index];
+
+            msgCANFD->msg_head.can_id = canfdFrame->can_id;
+            msgCANFD->msg_head.count  = count[index];
+            msgCANFD->msg_head.ival1  = ival1[index];
+            msgCANFD->msg_head.ival2  = ival2[index];
+            msgCANFD->canfdFrame[0]   = *canfdFrame;
+
+        }else{
+            struct bcmMsgSingleFrameCan *msgCAN = (struct bcmMsgSingleFrameCan *) msg;
+            struct can_frame *canFrame = (struct can_frame*) &frames[index];
+
+            msgCAN->msg_head.can_id = canFrame->can_id;
+            msgCAN->msg_head.count  = count[index];
+            msgCAN->msg_head.ival1  = ival1[index];
+            msgCAN->msg_head.ival2  = ival2[index];
+            msgCAN->canFrame[0]     = *canFrame;
+        }
+
+        // Send the TX_SETUP configuration message
+        if(send(*socketFD, msg, msgSize, 0) < 0){
+            printf("Error could not send TX_SETUP message \n");
+            shutdownHandler(ERR_TX_SETUP_FAILED, socketFD);
+        }
+
+    }
+
+    // Free the allocated memory for the BCM message
+    if(msg != NULL){
+        free(msg);
+    }
+}
+
+
+/**
+ * Create a cyclic transmission task for one or multiple CAN/CANFD frames.
+ * If more than one frame should be send cyclic the provided sequence of
+ * the frames is kept by the BCM.
+ *
+ * Note: The cyclic transmission task for the sequence can only be deleted
+ * with the CAN ID that was set in the bcm_msg_head!
+ *
+ * @param socketFD - The socket file descriptor
+ * @param frames   - The array of CAN/CANFD frames that should be send cyclic
+ * @param nframes  - The number of CAN/CANFD frames that should be send cyclic
+ * @param count    - Number of times the frame is send with the first interval.
+ *                   If count is zero only the second interval is being used.
+ * @param ival1    - First interval.
+ * @param ival2    - Second interval.
  * @param isCANFD  - Flag for CANFD frames
  */
 void createTxSetupSequence(int const *const socketFD, struct canfd_frame frames[], int nframes, uint32_t count,
@@ -205,7 +316,7 @@ void createTxSetupSequence(int const *const socketFD, struct canfd_frame frames[
     if(isCANFD){
         msgSize = sizeof(struct bcmMsgMultipleFramesCanFD);
         msg = malloc(msgSize);
-    }else {
+    }else{
         msgSize = sizeof(struct bcmMsgMultipleFramesCan);
         msg = malloc(msgSize);
     }
@@ -227,6 +338,7 @@ void createTxSetupSequence(int const *const socketFD, struct canfd_frame frames[
 
         msgCANFD->msg_head.opcode  = TX_SETUP;
         msgCANFD->msg_head.flags   = CAN_FD_FRAME | SETTIMER | STARTTIMER;
+        msgCANFD->msg_head.can_id  = frames[0].can_id;
         msgCANFD->msg_head.count   = count;
         msgCANFD->msg_head.ival1   = ival1;
         msgCANFD->msg_head.ival2   = ival2;
@@ -236,15 +348,16 @@ void createTxSetupSequence(int const *const socketFD, struct canfd_frame frames[
         memcpy(msgCANFD->canfdFrames, frames, arrSize);
     }else{
         struct bcmMsgMultipleFramesCan *msgCAN = (struct bcmMsgMultipleFramesCan *) msg;
+        struct can_frame *firstCanFrame = (struct can_frame*) &frames[0];
 
         msgCAN->msg_head.opcode    = TX_SETUP;
         msgCAN->msg_head.flags     = SETTIMER | STARTTIMER;
+        msgCAN->msg_head.can_id    = firstCanFrame->can_id;
         msgCAN->msg_head.count     = count;
         msgCAN->msg_head.ival1     = ival1;
         msgCAN->msg_head.ival2     = ival2;
         msgCAN->msg_head.nframes   = nframes;
 
-        // TODO: I am unsure if it is save to use memcpy instead of the for-loop
         for(int index = 0; index < nframes; index++){
             struct can_frame *canFrame = (struct can_frame*) &frames[index];
             msgCAN->canFrames[index] = *canFrame;
@@ -264,12 +377,20 @@ void createTxSetupSequence(int const *const socketFD, struct canfd_frame frames[
 }
 
 /**
- * Removes a cyclic transmission task for a CAN ID
+ * Removes a cyclic transmission task for a CAN ID.
+ *
+ * Note: If the cyclic transmission task was created with createTxSetupSequence
+ * it can only be removed with the CAN ID that was set in the bcm_msg_head even
+ * if the CAN IDs of the sequence are different. If you try to delete a cyclic
+ * transmission task which CAN ID was not set in the bcm_msg_head the delete
+ * will fail with an error! If you delete the transmission task that was set
+ * in the bcm_msg_head the cyclic transmission of all frames in the sequence
+ * will be stopped.
  *
  * @param socketFD
  * @param canID
  */
-void createTxDelete(int const *const socketFD, int canID){
+void createTxDelete(int const *const socketFD, canid_t canID, int isCANFD){
 
     struct bcm_msg_head msg;
 
@@ -279,6 +400,10 @@ void createTxDelete(int const *const socketFD, int canID){
 
     msg.opcode = TX_DELETE;
     msg.can_id = canID;
+
+    if(isCANFD){
+        msg.flags = CAN_FD_FRAME;
+    }
 
     // Send the TX_DELETE configuration message
     if(send(*socketFD, &msg, sizeof(msg), 0) < 0){
@@ -295,7 +420,7 @@ void createTxDelete(int const *const socketFD, int canID){
  * @param canID    - The CAN ID that should be added to the RX filter
  * @param isCANFD  - Flag for CANFD frames
  */
-void createRxSetupCanID(int const *const socketFD, int canID, int isCANFD){
+void createRxSetupCanID(int const *const socketFD, canid_t canID, int isCANFD){
 
     struct bcm_msg_head msg;
 
@@ -327,7 +452,7 @@ void createRxSetupCanID(int const *const socketFD, int canID, int isCANFD){
  * @param mask     - The mask for the relevant bits of the frame
  * @param isCANFD  - Flag for CANFD frames
  */
-void createRxSetupMask(int const *const socketFD, int canID, struct canfd_frame mask, int isCANFD){
+void createRxSetupMask(int const *const socketFD, canid_t canID, struct canfd_frame mask, int isCANFD){
 
     // BCM message we are sending with a single CAN or CANFD frame
     void* msg      = NULL;
@@ -384,7 +509,7 @@ void createRxSetupMask(int const *const socketFD, int canID, struct canfd_frame 
  * @param socketFD
  * @param canID
  */
-void createRxDelete(int const *const socketFD, int canID){
+void createRxDelete(int const *const socketFD, canid_t canID){
 
     struct bcm_msg_head msg;
 
@@ -452,14 +577,14 @@ void processContentChange(struct bcmMsgSingleFrameCanFD const* const msg){
  */
 void processReceive(int const* const socketFD){
 
-    int nbytes = 0;                 // Number of bytes we received
+    int nbytes = 0;                    // Number of bytes we received
     struct bcmMsgSingleFrameCanFD msg; // The buffer that stores the received message
 
     // Note: Always initialize the whole struct with 0.
     // Random values in the memory can cause weird bugs!
     memset(&msg, 0, sizeof(msg));
 
-    // "Reset" errno before calling recv that sets errno on failure
+    // Reset errno before calling receive on the socket that sets errno on failure
     errno = 0;
 
     // Receive on the BCM socket
@@ -590,6 +715,19 @@ int main(){
     ival2.tv_sec  = 1;
     ival2.tv_usec = 0;
 
+    struct bcm_timeval ivalArr1[2];
+    ivalArr1[0] = ival1;
+    ivalArr1[1] = ival1;
+
+    struct bcm_timeval ivalArr2[2];
+    ivalArr2[0] = ival2;
+    ivalArr2[1] = ival2;
+
+    // Test counts
+    uint32_t countArr[2];
+    countArr[0] = 10;
+    countArr[1] = 5;
+
     // Test Mask
     struct canfd_frame mask;
     mask.len     = 1;
@@ -597,32 +735,59 @@ int main(){
 
     // TX_SEND Test
     //createTxSend(&socketFD, frameArrCAN, 2, 0);
-    createTxSend(&socketFD, frameArrCANFD, 2, 1);
+    //createTxSend(&socketFD, frameArrCANFD, 2, 1);
+
+    // TX_SETUP Test
+    //createTxSetup(&socketFD, frameArrCAN, 2, countArr, ivalArr1, ivalArr2,0);
+    //sleep(10);
+
+    createTxSetup(&socketFD, frameArrCANFD, 2, countArr, ivalArr1, ivalArr2, 1);
+    sleep(10);
+
 
     // TX_SETUP Sequence Test
     //createTxSetupSequence(&socketFD, frameArrCAN, 2, 10, ival1, ival2, 0);
+    //sleep(10);
+
     //createTxSetupSequence(&socketFD, frameArrCANFD, 2, 10, ival1, ival2, 1);
+    //sleep(10);
+
+
+    // TX_DELETE Test
+    //createTxSetupSequence(&socketFD, &frame3, 1, 10, ival1, ival2, 1);
+    //sleep(5);
+    //createTxDelete(&socketFD, frame3.can_id, 1);
+    //sleep(10);
+
+    //createTxSetupSequence(&socketFD, frameArrCANFD, 2, 10, ival1, ival2, 1);
+    //sleep(5);
+    //createTxDelete(&socketFD, frame3.can_id, 1);
+    //sleep(10);
+
 
     // RX_SETUP CAN ID Test
     //createRxSetupCanID(&socketFD, 0x222, 0);
     //createRxSetupCanID(&socketFD, 0x333, 1);
 
+
     // RX_SETUP CAN ID + Mask Test
-    createRxSetupMask(&socketFD, 0x444, mask, 0);
+    //createRxSetupMask(&socketFD, 0x444, mask, 0);
     //createRxSetupMask(&socketFD, 0x555, mask, 1);
+
 
     // RX_DELETE Test
     //createRxDelete(&socketFD, 0x333);
 
+
     // Keep running until stopped
-    while(keepRunning){
+    //while(keepRunning){
 
         // Process operation message from the queue
         //processOperation(&socketFD);
 
         // Receive on the socket
-        processReceive(&socketFD);
-    }
+        //processReceive(&socketFD);
+    //}
 
     // Call the shutdown handler
     shutdownHandler(RET_E_OK, &socketFD);
